@@ -54,6 +54,9 @@ namespace AutoRepairCore.Pages.ServiceOrders
 
             try
             {
+                // La transacción garantiza que la orden y sus servicios se guarden juntos o no se guarda nada
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
                 // Calcula el costo con IVA
                 var services = await _context.Services
                     .Where(s => SelectedServiceIds.Contains(s.ServiceID))
@@ -75,6 +78,7 @@ namespace AutoRepairCore.Pages.ServiceOrders
                 };
 
                 _context.ServiceOrders.Add(serviceOrder);
+                // Primer save: obtiene el Folio generado por SQL Server (necesario para los OrderService)
                 await _context.SaveChangesAsync();
 
                 // Agrega los servicios de la orden
@@ -88,13 +92,18 @@ namespace AutoRepairCore.Pages.ServiceOrders
                     });
                 }
 
+                // Segundo save: inserta los servicios y activa el trigger de costo
                 await _context.SaveChangesAsync();
+
+                // Confirma ambos saves en la BD
+                await transaction.CommitAsync();
 
                 TempData["SuccessMessage"] = $"Orden de servicio #{serviceOrder.Folio} creada exitosamente.";
                 return RedirectToPage("./Index");
             }
             catch (Exception ex)
             {
+                // Si cualquier save falla, la transacción revierte ambos automáticamente
                 _logger.LogError(ex, "Error al crear la orden de servicio");
                 TempData["ErrorMessage"] = "Ocurrió un error al crear la orden. Por favor intente de nuevo.";
                 await LoadFormDataAsync();

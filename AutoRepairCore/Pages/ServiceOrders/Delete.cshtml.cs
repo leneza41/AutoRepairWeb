@@ -55,6 +55,9 @@ namespace AutoRepairCore.Pages.ServiceOrders
 
             try
             {
+                // La transacción garantiza que los hijos y la orden se eliminen juntos o no se elimina nada
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
                 // Elimina hijos primero para evitar errores de FK
                 _context.OrderServices.RemoveRange(
                     await _context.OrderServices.Where(os => os.Folio == id).ToListAsync());
@@ -65,16 +68,22 @@ namespace AutoRepairCore.Pages.ServiceOrders
                 _context.OrderMechanics.RemoveRange(
                     await _context.OrderMechanics.Where(om => om.Folio == id).ToListAsync());
 
+                // Primer save: elimina todos los registros hijos
                 await _context.SaveChangesAsync();
 
                 // Elimina la orden
                 _context.ServiceOrders.Remove(serviceOrder);
+                // Segundo save: elimina la orden principal
                 await _context.SaveChangesAsync();
+
+                // Confirma ambos saves en la BD
+                await transaction.CommitAsync();
 
                 TempData["SuccessMessage"] = $"Orden de servicio #{id} eliminada exitosamente.";
             }
             catch (Exception ex)
             {
+                // Si cualquier save falla, la transacción revierte ambos automáticamente
                 _logger.LogError(ex, "Error al eliminar la orden {Id}", id);
                 TempData["ErrorMessage"] = "Ocurrió un error al eliminar la orden. Por favor intente de nuevo.";
                 return RedirectToPage("./Details", new { id });

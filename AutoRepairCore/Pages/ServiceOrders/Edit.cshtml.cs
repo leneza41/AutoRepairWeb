@@ -88,10 +88,14 @@ namespace AutoRepairCore.Pages.ServiceOrders
 
             try
             {
+                // La transacción garantiza que los 3 saves se apliquen juntos o se reviertan todos
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
                 // Reemplaza los servicios para que el trigger recalcule el costo
                 var existingServices = await _context.OrderServices
                     .Where(os => os.Folio == ServiceOrder.Folio).ToListAsync();
                 _context.OrderServices.RemoveRange(existingServices);
+                // Primer save: elimina los servicios anteriores
                 await _context.SaveChangesAsync();
 
                 for (int i = 0; i < SelectedServiceIds.Count; i++)
@@ -103,6 +107,7 @@ namespace AutoRepairCore.Pages.ServiceOrders
                         Quantity = i < ServiceQuantities.Count ? ServiceQuantities[i] : 1
                     });
                 }
+                // Segundo save: inserta los nuevos servicios y activa el trigger de costo
                 await _context.SaveChangesAsync();
 
                 // Carga la orden desde la BD para no pisar fechas ni costo
@@ -118,7 +123,11 @@ namespace AutoRepairCore.Pages.ServiceOrders
                 // Solo actualiza los campos editables por el usuario
                 dbOrder.State = ServiceOrder.State;
                 dbOrder.SerialNumber = ServiceOrder.SerialNumber;
+                // Tercer save: actualiza el estado y vehículo de la orden
                 await _context.SaveChangesAsync();
+
+                // Confirma los 3 saves juntos en la BD
+                await transaction.CommitAsync();
 
                 TempData["SuccessMessage"] = $"Orden de servicio #{ServiceOrder.Folio} actualizada exitosamente.";
                 return RedirectToPage("./Index");
@@ -135,6 +144,7 @@ namespace AutoRepairCore.Pages.ServiceOrders
             }
             catch (Exception ex)
             {
+                // Si cualquier save falla, la transacción revierte los 3 automáticamente
                 _logger.LogError(ex, "Error al editar la orden {Folio}", ServiceOrder.Folio);
                 TempData["ErrorMessage"] = "Ocurrió un error al actualizar la orden. Por favor intente de nuevo.";
                 await LoadFormDataAsync(SelectedCustomerID);

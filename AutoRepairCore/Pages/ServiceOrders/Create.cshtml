@@ -163,6 +163,7 @@
         const MAX_QTY = 9999;
         let serviceRows = [];
 
+        // Al cambiar el cliente, carga sus vehículos vía AJAX
         $('#customerSelect').change(function () {
             var customerId = $(this).val();
             var vehicleSelect = $('#vehicleSelect');
@@ -186,6 +187,7 @@
             }
         });
 
+        // Agrega un servicio a la lista local y actualiza la tabla
         $('#addServiceBtn').click(function () {
             var sel = $('#serviceDropdown');
             var id = parseInt(sel.val());
@@ -219,6 +221,7 @@
             $('#serviceQty').val(1);
         });
 
+        // Redibuja la tabla de servicios y recalcula subtotal, IVA y total
         function renderRows() {
             var tbody = $('#serviceRows');
             tbody.empty();
@@ -261,11 +264,13 @@
             $('#totalCell').text('$' + total.toLocaleString('es-MX', {minimumFractionDigits:2}));
         }
 
+        // Elimina un servicio de la lista por índice
         $(document).on('click', '.remove-btn', function () {
             serviceRows.splice($(this).data('idx'), 1);
             renderRows();
         });
 
+        // Actualiza la cantidad de un servicio y recalcula los totales
         $(document).on('change', '.qty-input', function () {
             var idx = $(this).data('idx');
             var val = parseInt($(this).val());
@@ -275,6 +280,7 @@
             renderRows();
         });
 
+        // Valida el formulario en el cliente antes de enviarlo al servidor
         $('#createForm').submit(function (e) {
             var valid = true;
 
@@ -296,9 +302,11 @@
             }
         });
 
+        // Oculta los mensajes de error al corregir los campos
         $('#customerSelect').on('change', function () { if ($(this).val()) $('#customerError').hide(); });
         $('#vehicleSelect').on('change', function () { if ($(this).val()) $('#vehicleError').hide(); });
 
+        // Muestra una notificación temporal con icono, color y barra de progreso
         function showToast(msg, type) {
             const icons = {
                 warning: 'bi-exclamation-triangle-fill',
