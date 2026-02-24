@@ -1,0 +1,108 @@
+@page
+@model AutoRepairCore.Pages.ServiceOrders.EditModel
+@{
+    ViewData["Title"] = "Editar Orden de Servicio";
+}
+
+<h1>Editar Orden de Servicio</h1>
+
+<hr />
+
+<div class="row">
+    <div class="col-md-8">
+        <form method="post">
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+            <input type="hidden" asp-for="ServiceOrder.Folio" />
+
+            <div class="mb-3">
+                <label class="form-label">Cliente</label>
+                <select id="customerSelect" class="form-select" asp-for="SelectedCustomerID" asp-items="Model.Customers">
+                    <option value="">-- Seleccionar Cliente --</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="ServiceOrder.SerialNumber" class="form-label">Vehículo</label>
+                <select id="vehicleSelect" class="form-select" asp-for="ServiceOrder.SerialNumber">
+                    <option value="">-- Primero seleccione un cliente --</option>
+                    @foreach (var vehicle in Model.CustomerVehicles)
+                    {
+                        <option value="@vehicle.SerialNumber" selected="@(vehicle.SerialNumber == Model.ServiceOrder.SerialNumber)">
+                            @vehicle.Brand @vehicle.Model - @vehicle.PlateNumber (@vehicle.Year)
+                        </option>
+                    }
+                </select>
+                <span asp-validation-for="ServiceOrder.SerialNumber" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="ServiceOrder.EntryDate" class="form-label">Fecha de Entrada</label>
+                <input asp-for="ServiceOrder.EntryDate" class="form-control" type="datetime-local" />
+                <span asp-validation-for="ServiceOrder.EntryDate" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="ServiceOrder.EstimatedDeliveryTime" class="form-label">Fecha de Entrega Estimada</label>
+                <input asp-for="ServiceOrder.EstimatedDeliveryTime" class="form-control" type="datetime-local" />
+                <span asp-validation-for="ServiceOrder.EstimatedDeliveryTime" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="ServiceOrder.DeliveryTime" class="form-label">Fecha de Entrega Real</label>
+                <input asp-for="ServiceOrder.DeliveryTime" class="form-control" type="datetime-local" />
+                <span asp-validation-for="ServiceOrder.DeliveryTime" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="ServiceOrder.State" class="form-label">Estado</label>
+                <select asp-for="ServiceOrder.State" class="form-select">
+                    <option value="Abierta">Abierta</option>
+                    <option value="En proceso">En proceso</option>
+                    <option value="Finalizada">Finalizada</option>
+                    <option value="Cancelada">Cancelada</option>
+                </select>
+                <span asp-validation-for="ServiceOrder.State" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="ServiceOrder.Cost" class="form-label">Costo</label>
+                <input asp-for="ServiceOrder.Cost" class="form-control" type="number" step="0.01" />
+                <span asp-validation-for="ServiceOrder.Cost" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <button type="submit" class="btn btn-primary">Guardar</button>
+                <a asp-page="Index" class="btn btn-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        $(document).ready(function () {
+            $('#customerSelect').change(function () {
+                var customerId = $(this).val();
+                var vehicleSelect = $('#vehicleSelect');
+                var currentSerialNumber = '@Model.ServiceOrder.SerialNumber';
+
+                vehicleSelect.empty();
+                vehicleSelect.append('<option value="">-- Seleccionar Vehículo --</option>');
+
+                if (customerId) {
+                    $.getJSON('/ServiceOrders/Edit?handler=Vehicles&customerId=' + customerId, function (data) {
+                        $.each(data, function (index, item) {
+                            var option = $('<option></option>').val(item.serialNumber).text(item.display);
+                            if (item.serialNumber === currentSerialNumber) {
+                                option.attr('selected', 'selected');
+                            }
+                            vehicleSelect.append(option);
+                        });
+                    });
+                }
+            });
+        });
+    </script>
+}

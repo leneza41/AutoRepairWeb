@@ -1,0 +1,45 @@
+@page
+@model AutoRepairCore.Pages.ServiceOrders.IndexModel
+@{
+    ViewData["Title"] = "Órdenes de Servicio";
+}
+
+<h1>Órdenes de Servicio</h1>
+
+<p>
+    <a asp-page="Create" class="btn btn-primary">Crear Nueva Orden</a>
+</p>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Folio</th>
+            <th>Cliente</th>
+            <th>Vehículo</th>
+            <th>Fecha de Entrada</th>
+            <th>Entrega Estimada</th>
+            <th>Estado</th>
+            <th>Costo</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Model.ServiceOrders)
+        {
+            <tr>
+                <td>@item.Folio</td>
+                <td>@item.Vehicle.Customer.Name @item.Vehicle.Customer.FirstLastname</td>
+                <td>@item.Vehicle.Brand @item.Vehicle.Model (@item.Vehicle.PlateNumber)</td>
+                <td>@item.EntryDate.ToString("dd/MM/yyyy HH:mm")</td>
+                <td>@item.EstimatedDeliveryTime.ToString("dd/MM/yyyy HH:mm")</td>
+                <td><span class="badge bg-info">@item.State</span></td>
+                <td>$@item.Cost.ToString("N2")</td>
+                <td>
+                    <a asp-page="Details" asp-route-id="@item.Folio" class="btn btn-sm btn-info">Detalles</a>
+                    <a asp-page="Edit" asp-route-id="@item.Folio" class="btn btn-sm btn-warning">Editar</a>
+                    <a asp-page="Delete" asp-route-id="@item.Folio" class="btn btn-sm btn-danger">Eliminar</a>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
