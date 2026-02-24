@@ -41,6 +41,11 @@ namespace AutoRepairCore.Data
                     .WithMany(c => c.Vehicles)
                     .HasForeignKey(e => e.CustomerID)
                     .OnDelete(DeleteBehavior.Cascade);
+                entity.ToTable(t =>
+                {
+                    t.HasTrigger("before_vehicle_insert");
+                    t.HasTrigger("before_vehicle_update");
+                });
             });
 
             modelBuilder.Entity<Mechanic>(entity =>
@@ -92,6 +97,10 @@ namespace AutoRepairCore.Data
                 entity.HasOne(e => e.ServiceOrder)
                     .WithMany(s => s.OrderServices)
                     .HasForeignKey(e => e.Folio);
+                entity.ToTable(t =>
+                {
+                    t.HasTrigger("trg_UpdateServiceOrderCost");
+                });
             });
 
             modelBuilder.Entity<OrderMechanic>(entity =>

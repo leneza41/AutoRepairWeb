@@ -21,6 +21,8 @@ namespace AutoRepairCore.Pages.ServiceOrders
             ServiceOrders = await _context.ServiceOrders
                 .Include(s => s.Vehicle)
                     .ThenInclude(v => v.Customer)
+                .Include(s => s.OrderServices)
+                    .ThenInclude(os => os.Service)
                 .OrderByDescending(s => s.Folio)
                 .ToListAsync();
         }

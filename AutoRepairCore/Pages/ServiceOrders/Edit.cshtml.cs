@@ -10,6 +10,7 @@ namespace AutoRepairCore.Pages.ServiceOrders
     public class EditModel : PageModel
     {
         private readonly AutoRepairDbContext _context;
+        private const decimal IVA_RATE = 0.16m;
 
         public EditModel(AutoRepairDbContext context)
         {
@@ -23,31 +24,25 @@ namespace AutoRepairCore.Pages.ServiceOrders
         public int SelectedCustomerID { get; set; }
 
         [BindProperty]
-        public List<int> SelectedMechanicIds { get; set; } = new List<int>();
+        public List<int> SelectedServiceIds { get; set; } = new();
 
         [BindProperty]
-        public List<int> SelectedServiceIds { get; set; } = new List<int>();
-
-        [BindProperty]
-        public List<int> ServiceQuantities { get; set; } = new List<int>();
+        public List<int> ServiceQuantities { get; set; } = new();
 
         public SelectList Customers { get; set; } = null!;
-        public List<Vehicle> CustomerVehicles { get; set; } = new List<Vehicle>();
-        public List<Mechanic> AllMechanics { get; set; } = new List<Mechanic>();
-        public List<Service> AllServices { get; set; } = new List<Service>();
-        public List<OrderService> ExistingOrderServices { get; set; } = new List<OrderService>();
+        public List<Vehicle> CustomerVehicles { get; set; } = new();
+        public List<Service> AllServices { get; set; } = new();
+        public List<OrderService> ExistingOrderServices { get; set; } = new();
+        public string CustomerRfc { get; set; } = string.Empty;
+        public string CustomerFullName { get; set; } = string.Empty;
 
         public async Task<IActionResult> OnGetAsync(int? id)
         {
-            if (id == null)
-            {
-                return NotFound();
-            }
+            if (id == null) return NotFound();
 
             var serviceOrder = await _context.ServiceOrders
-                .Include(s => s.Vehicle)
-                .Include(s => s.OrderMechanics)
-                .Include(s => s.OrderServices)
+                .Include(s => s.Vehicle).ThenInclude(v => v.Customer)
+                .Include(s => s.OrderServices).ThenInclude(os => os.Service)
                 .FirstOrDefaultAsync(m => m.Folio == id);
 
             if (serviceOrder == null)
@@ -58,14 +53,12 @@ namespace AutoRepairCore.Pages.ServiceOrders
 
             ServiceOrder = serviceOrder;
             SelectedCustomerID = serviceOrder.Vehicle.CustomerID;
-
-            // Load existing mechanics and services
-            SelectedMechanicIds = serviceOrder.OrderMechanics.Select(om => om.EmployeeID).ToList();
             ExistingOrderServices = serviceOrder.OrderServices.ToList();
+            CustomerRfc = serviceOrder.Vehicle.Customer.RFC;
+            CustomerFullName = $"{serviceOrder.Vehicle.Customer.Name} {serviceOrder.Vehicle.Customer.FirstLastname}";
 
             await LoadCustomersAsync();
             await LoadVehiclesForCustomerAsync(SelectedCustomerID);
-            await LoadMechanicsAsync();
             await LoadServicesAsync();
 
             return Page();
@@ -73,62 +66,78 @@ namespace AutoRepairCore.Pages.ServiceOrders
 
         public async Task<IActionResult> OnPostAsync()
         {
+            ModelState.Remove("ServiceOrder.Vehicle");
+            ModelState.Remove("ServiceOrder.OrderReplacements");
+            ModelState.Remove("ServiceOrder.OrderServices");
+            ModelState.Remove("ServiceOrder.OrderMechanics");
+
+            if (SelectedServiceIds.Count == 0)
+                ModelState.AddModelError("SelectedServiceIds", "Es necesario agregar al menos un servicio.");
+
+            for (int i = 0; i < ServiceQuantities.Count; i++)
+            {
+                if (ServiceQuantities[i] < 1)
+                    ModelState.AddModelError("ServiceQuantities", $"La cantidad del servicio #{i + 1} debe ser al menos 1.");
+                if (ServiceQuantities[i] > 9999)
+                    ModelState.AddModelError("ServiceQuantities", $"La cantidad del servicio #{i + 1} no puede superar 9,999.");
+            }
+
             if (!ModelState.IsValid)
             {
                 await LoadCustomersAsync();
-                await LoadMechanicsAsync();
                 await LoadServicesAsync();
                 if (SelectedCustomerID > 0)
                 {
                     await LoadVehiclesForCustomerAsync(SelectedCustomerID);
+                    var customer = await _context.Customers.FindAsync(SelectedCustomerID);
+                    if (customer != null)
+                    {
+                        CustomerRfc = customer.RFC;
+                        CustomerFullName = $"{customer.Name} {customer.FirstLastname}";
+                    }
                 }
-                TempData["ErrorMessage"] = "Por favor, corrija los errores en el formulario.";
                 return Page();
             }
 
-            _context.Attach(ServiceOrder).State = EntityState.Modified;
-
             try
             {
-                // Remove existing mechanics
-                var existingMechanics = await _context.OrderMechanics
-                    .Where(om => om.Folio == ServiceOrder.Folio)
+                // Recalculate cost with IVA
+                var services = await _context.Services
+                    .Where(s => SelectedServiceIds.Contains(s.ServiceID))
                     .ToListAsync();
-                _context.OrderMechanics.RemoveRange(existingMechanics);
 
-                // Add new mechanics
-                foreach (var mechanicId in SelectedMechanicIds)
-                {
-                    var orderMechanic = new OrderMechanic
-                    {
-                        EmployeeID = mechanicId,
-                        Folio = ServiceOrder.Folio
-                    };
-                    _context.OrderMechanics.Add(orderMechanic);
-                }
-
-                // Remove existing services
-                var existingServices = await _context.OrderServices
-                    .Where(os => os.Folio == ServiceOrder.Folio)
-                    .ToListAsync();
-                _context.OrderServices.RemoveRange(existingServices);
-
-                // Add new services
+                decimal subtotal = 0;
                 for (int i = 0; i < SelectedServiceIds.Count; i++)
                 {
-                    var serviceId = SelectedServiceIds[i];
-                    var quantity = i < ServiceQuantities.Count ? ServiceQuantities[i] : 1;
-
-                    var orderService = new OrderService
+                    var svc = services.FirstOrDefault(s => s.ServiceID == SelectedServiceIds[i]);
+                    if (svc != null)
                     {
-                        ServiceID = serviceId,
-                        Folio = ServiceOrder.Folio,
-                        Quantity = quantity
-                    };
-                    _context.OrderServices.Add(orderService);
+                        int qty = i < ServiceQuantities.Count ? ServiceQuantities[i] : 1;
+                        subtotal += svc.Cost * qty;
+                    }
                 }
+                ServiceOrder.Cost = subtotal + (subtotal * IVA_RATE);
 
+                _context.Attach(ServiceOrder).State = EntityState.Modified;
                 await _context.SaveChangesAsync();
+
+                // Delete existing services first, save, then insert new ones
+                var existingServices = await _context.OrderServices
+                    .Where(os => os.Folio == ServiceOrder.Folio).ToListAsync();
+                _context.OrderServices.RemoveRange(existingServices);
+                await _context.SaveChangesAsync();
+
+                for (int i = 0; i < SelectedServiceIds.Count; i++)
+                {
+                    _context.OrderServices.Add(new OrderService
+                    {
+                        ServiceID = SelectedServiceIds[i],
+                        Folio = ServiceOrder.Folio,
+                        Quantity = i < ServiceQuantities.Count ? ServiceQuantities[i] : 1
+                    });
+                }
+                await _context.SaveChangesAsync();
+
                 TempData["SuccessMessage"] = $"Orden de servicio #{ServiceOrder.Folio} actualizada exitosamente.";
                 return RedirectToPage("./Index");
             }
@@ -139,20 +148,22 @@ namespace AutoRepairCore.Pages.ServiceOrders
                     TempData["ErrorMessage"] = "La orden de servicio ya no existe.";
                     return RedirectToPage("./Index");
                 }
-                else
-                {
-                    throw;
-                }
+                throw;
             }
             catch (Exception ex)
             {
                 TempData["ErrorMessage"] = $"Error al actualizar la orden: {ex.Message}";
                 await LoadCustomersAsync();
-                await LoadMechanicsAsync();
                 await LoadServicesAsync();
                 if (SelectedCustomerID > 0)
                 {
                     await LoadVehiclesForCustomerAsync(SelectedCustomerID);
+                    var customer = await _context.Customers.FindAsync(SelectedCustomerID);
+                    if (customer != null)
+                    {
+                        CustomerRfc = customer.RFC;
+                        CustomerFullName = $"{customer.Name} {customer.FirstLastname}";
+                    }
                 }
                 return Page();
             }
@@ -160,52 +171,41 @@ namespace AutoRepairCore.Pages.ServiceOrders
 
         public async Task<JsonResult> OnGetVehiclesAsync(int customerId)
         {
+            var customer = await _context.Customers.FindAsync(customerId);
             var vehicles = await _context.Vehicles
                 .Where(v => v.CustomerID == customerId)
                 .Select(v => new
                 {
                     serialNumber = v.SerialNumber,
                     display = $"{v.Brand} {v.Model} - {v.PlateNumber} ({v.Year})"
-                })
-                .ToListAsync();
+                }).ToListAsync();
 
-            return new JsonResult(vehicles);
+            return new JsonResult(new
+            {
+                vehicles,
+                customerRfc = customer?.RFC ?? "",
+                customerName = customer != null ? $"{customer.Name} {customer.FirstLastname}" : ""
+            });
         }
 
-        private bool ServiceOrderExists(int id)
-        {
-            return _context.ServiceOrders.Any(e => e.Folio == id);
-        }
+        private bool ServiceOrderExists(int id) =>
+            _context.ServiceOrders.Any(e => e.Folio == id);
 
         private async Task LoadCustomersAsync()
         {
-            var customers = await _context.Customers
-                .OrderBy(c => c.Name)
-                .ToListAsync();
-
+            var customers = await _context.Customers.OrderBy(c => c.Name).ToListAsync();
             Customers = new SelectList(customers, "CustomerID", "Name");
         }
 
         private async Task LoadVehiclesForCustomerAsync(int customerId)
         {
             CustomerVehicles = await _context.Vehicles
-                .Where(v => v.CustomerID == customerId)
-                .ToListAsync();
-        }
-
-        private async Task LoadMechanicsAsync()
-        {
-            AllMechanics = await _context.Mechanics
-                .OrderBy(m => m.Name)
-                .ThenBy(m => m.FirstLastname)
-                .ToListAsync();
+                .Where(v => v.CustomerID == customerId).ToListAsync();
         }
 
         private async Task LoadServicesAsync()
         {
-            AllServices = await _context.Services
-                .OrderBy(s => s.Name)
-                .ToListAsync();
+            AllServices = await _context.Services.OrderBy(s => s.Name).ToListAsync();
         }
     }
 }

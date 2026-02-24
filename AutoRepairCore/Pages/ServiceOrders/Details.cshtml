@@ -1,59 +1,132 @@
 @page
 @model AutoRepairCore.Pages.ServiceOrders.DetailsModel
 @{
-    ViewData["Title"] = "Detalles de Orden";
+    ViewData["Title"] = $"Orden #{Model.ServiceOrder.Folio}";
+    var order = Model.ServiceOrder;
+    decimal subtotal = order.OrderServices.Sum(os => os.Service.Cost * os.Quantity);
+    decimal iva = subtotal * 0.16m;
+    decimal total = subtotal + iva;
+
+    string stateBadge = order.State switch {
+        "Abierta"    => "bg-primary",
+        "En proceso" => "bg-warning text-dark",
+        "Finalizada" => "bg-success",
+        "Cancelada"  => "bg-danger",
+        _            => "bg-secondary"
+    };
 }
 
-<h1>Detalles de Orden de Servicio - Folio #@Model.ServiceOrder.Folio</h1>
+<div class="d-flex align-items-center mb-4 gap-2">
+    <i class="bi bi-file-text fs-3 text-info"></i>
+    <h2 class="mb-0">Orden de Servicio <span class="text-muted fs-4">#@order.Folio</span></h2>
+    <span class="badge @stateBadge ms-2 fs-6">@order.State</span>
+</div>
 
-<hr />
-
-<div class="row">
-    <div class="col-md-6">
-        <h4>Cliente</h4>
-        <dl class="row">
-            <dt class="col-sm-4">Nombre:</dt>
-            <dd class="col-sm-8">@Model.ServiceOrder.Vehicle.Customer.Name @Model.ServiceOrder.Vehicle.Customer.FirstLastname</dd>
-            
-            <dt class="col-sm-4">RFC:</dt>
-            <dd class="col-sm-8">@Model.ServiceOrder.Vehicle.Customer.RFC</dd>
-            
-            <dt class="col-sm-4">Teléfono:</dt>
-            <dd class="col-sm-8">@Model.ServiceOrder.Vehicle.Customer.MainPhone</dd>
-        </dl>
-
-        <h4>Vehículo</h4>
-        <dl class="row">
-            <dt class="col-sm-4">Marca/Modelo:</dt>
-            <dd class="col-sm-8">@Model.ServiceOrder.Vehicle.Brand @Model.ServiceOrder.Vehicle.Model</dd>
-            
-            <dt class="col-sm-4">Placas:</dt>
-            <dd class="col-sm-8">@Model.ServiceOrder.Vehicle.PlateNumber</dd>
-            
-            <dt class="col-sm-4">Año:</dt>
-            <dd class="col-sm-8">@Model.ServiceOrder.Vehicle.Year</dd>
-        </dl>
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white fw-bold">
+        <i class="bi bi-info-circle me-1"></i> Datos de la Orden
     </div>
-
-    <div class="col-md-6">
-        <h4>Información de la Orden</h4>
-        <dl class="row">
-            <dt class="col-sm-5">Fecha de Entrada:</dt>
-            <dd class="col-sm-7">@Model.ServiceOrder.EntryDate.ToString("dd/MM/yyyy HH:mm")</dd>
-            
-            <dt class="col-sm-5">Entrega Estimada:</dt>
-            <dd class="col-sm-7">@Model.ServiceOrder.EstimatedDeliveryTime.ToString("dd/MM/yyyy HH:mm")</dd>
-            
-            <dt class="col-sm-5">Estado:</dt>
-            <dd class="col-sm-7"><span class="badge bg-info">@Model.ServiceOrder.State</span></dd>
-            
-            <dt class="col-sm-5">Costo Total:</dt>
-            <dd class="col-sm-7"><strong>$@Model.ServiceOrder.Cost.ToString("N2")</strong></dd>
-        </dl>
+    <div class="card-body p-0">
+        <table class="table table-bordered mb-0">
+            <tr>
+                <th class="text-end bg-light" style="width:180px">FOLIO:</th>
+                <td><strong>#@order.Folio</strong></td>
+            </tr>
+            <tr>
+                <th class="text-end bg-light">FECHA DE ENTRADA:</th>
+                <td>@order.EntryDate.ToString("dd/MM/yyyy HH:mm")</td>
+            </tr>
+            <tr>
+                <th class="text-end bg-light">ENTREGA ESTIMADA:</th>
+                <td>@order.EstimatedDeliveryTime.ToString("dd/MM/yyyy HH:mm")</td>
+            </tr>
+            @if (order.DeliveryTime.HasValue)
+            {
+                <tr>
+                    <th class="text-end bg-light">FECHA DE ENTREGA:</th>
+                    <td>@order.DeliveryTime.Value.ToString("dd/MM/yyyy HH:mm")</td>
+                </tr>
+            }
+            <tr>
+                <th class="text-end bg-light">CLIENTE:</th>
+                <td>
+                    <span class="badge bg-secondary fs-6">RFC: @order.Vehicle.Customer.RFC</span>
+                    &nbsp;<span class="fw-semibold">@order.Vehicle.Customer.Name @order.Vehicle.Customer.FirstLastname</span>
+                    <span class="text-muted ms-2 small"><i class="bi bi-telephone"></i> @order.Vehicle.Customer.MainPhone</span>
+                </td>
+            </tr>
+            <tr>
+                <th class="text-end bg-light">VEHÍCULO:</th>
+                <td>
+                    <span class="fw-semibold">@order.Vehicle.Brand @order.Vehicle.Model</span>
+                    <span class="badge bg-light text-dark border ms-1">@order.Vehicle.PlateNumber</span>
+                    <span class="text-muted ms-1">(@order.Vehicle.Year)</span>
+                    @if (!string.IsNullOrEmpty(order.Vehicle.Color))
+                    {
+                        <span class="text-muted ms-1">· @order.Vehicle.Color</span>
+                    }
+                </td>
+            </tr>
+        </table>
     </div>
 </div>
 
-<div class="mt-3">
-    <a asp-page="./Edit" asp-route-id="@Model.ServiceOrder.Folio" class="btn btn-warning">Editar</a>
-    <a asp-page="./Index" class="btn btn-secondary">Volver a Lista</a>
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-success text-white fw-bold">
+        <i class="bi bi-tools me-1"></i> Servicios Realizados
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-bordered mb-0">
+            <thead class="table-success">
+                <tr>
+                    <th style="width:110px">ID SERVICIO</th>
+                    <th>DESCRIPCIÓN</th>
+                    <th style="width:100px" class="text-center">CANTIDAD</th>
+                    <th style="width:130px" class="text-end">PRECIO</th>
+                    <th style="width:130px" class="text-end">IMPORTE</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!order.OrderServices.Any())
+                {
+                    <tr>
+                        <td colspan="5" class="text-center text-muted fst-italic py-3">Sin servicios registrados.</td>
+                    </tr>
+                }
+                @foreach (var os in order.OrderServices)
+                {
+                    <tr>
+                        <td class="text-center"><span class="badge bg-secondary">@os.ServiceID</span></td>
+                        <td>@os.Service.Name</td>
+                        <td class="text-center">@os.Quantity</td>
+                        <td class="text-end">$@os.Service.Cost.ToString("N2")</td>
+                        <td class="text-end fw-semibold">$@((os.Service.Cost * os.Quantity).ToString("N2"))</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="4" class="text-end fw-bold">SUBTOTAL</td>
+                    <td class="text-end fw-bold bg-warning text-dark">$@subtotal.ToString("N2")</td>
+                </tr>
+                <tr>
+                    <td colspan="4" class="text-end fw-bold">IVA (16%)</td>
+                    <td class="text-end fw-bold bg-warning text-dark">$@iva.ToString("N2")</td>
+                </tr>
+                <tr>
+                    <td colspan="4" class="text-end fw-bold">TOTAL</td>
+                    <td class="text-end fw-bold bg-warning text-dark fs-5">$@total.ToString("N2")</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<div class="d-flex gap-2">
+    <a asp-page="./Edit" asp-route-id="@order.Folio" class="btn btn-warning">
+        <i class="bi bi-pencil-square me-1"></i>Editar
+    </a>
+    <a asp-page="./Index" class="btn btn-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Volver
+    </a>
 </div>
