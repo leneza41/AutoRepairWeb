@@ -29,7 +29,6 @@
 
 <form method="post" id="editForm">
     <input type="hidden" asp-for="ServiceOrder.Folio" />
-    <input type="hidden" asp-for="ServiceOrder.EntryDate" />
 
     <div class="card shadow-sm mb-4">
         <div class="card-header bg-warning text-dark fw-bold">
@@ -44,6 +43,10 @@
                 <tr>
                     <th class="text-end bg-light">FECHA ENTRADA:</th>
                     <td><strong>@Model.ServiceOrder.EntryDate.ToString("dd/MM/yyyy HH:mm")</strong></td>
+                </tr>
+                <tr>
+                    <th class="text-end bg-light">ENTREGA ESTIMADA:</th>
+                    <td><strong>@Model.ServiceOrder.EstimatedDeliveryTime.ToString("dd/MM/yyyy HH:mm")</strong></td>
                 </tr>
                 <tr>
                     <th class="text-end bg-light">ESTADO:</th>
@@ -218,8 +221,8 @@
             var cost = parseFloat(sel.find(':selected').data('cost'));
             var qty = parseInt($('#serviceQty').val());
 
-            if (!id) { showToast('Seleccione un servicio antes de agregar.', 'warning'); return; }
-            if (serviceRows.find(r => r.id === id)) { showToast('Este servicio ya fue agregado a la orden.', 'warning'); return; }
+            if (!id) { showToast('Seleccione un servicio antes de agregar.', 'danger'); return; }
+            if (serviceRows.find(r => r.id === id)) { showToast('Este servicio ya fue agregado a la orden.', 'danger'); return; }
             if (isNaN(qty) || qty < 1) { showToast('La cantidad debe ser al menos 1.', 'danger'); $('#serviceQty').val(1); return; }
             if (qty > MAX_QTY) { showToast(`La cantidad no puede superar ${MAX_QTY}.`, 'danger'); $('#serviceQty').val(MAX_QTY); return; }
 
@@ -298,15 +301,34 @@
         $('#vehicleSelect').on('change', function () { if ($(this).val()) $('#vehicleError').hide(); });
 
         function showToast(msg, type) {
+            const icons = {
+                warning: 'bi-exclamation-triangle-fill',
+                danger:  'bi-x-octagon-fill',
+                success: 'bi-check-circle-fill',
+                info:    'bi-info-circle-fill'
+            };
+            const icon = icons[type] || 'bi-bell-fill';
+            const id = 'toast-' + Date.now();
             var toast = $(`
-                <div class="toast align-items-center text-bg-${type} border-0 show position-fixed bottom-0 end-0 m-3" role="alert" style="z-index:9999">
-                    <div class="d-flex">
-                        <div class="toast-body">${msg}</div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                <div id="${id}" role="alert"
+                     style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;min-width:320px;max-width:420px;
+                            box-shadow:0 8px 24px rgba(0,0,0,.22);border-radius:.6rem;overflow:hidden;
+                            animation:slideInRight .3s ease;">
+                    <div class="d-flex align-items-center gap-2 p-3 text-white fw-semibold fs-6 bg-${type}" style="border-radius:.6rem .6rem 0 0">
+                        <i class="bi ${icon} fs-5 flex-shrink-0"></i>
+                        <span class="flex-grow-1">${msg}</span>
+                        <button type="button" class="btn-close btn-close-white ms-2 flex-shrink-0" onclick="$('#${id}').remove()"></button>
                     </div>
-                </div>`);
+                    <div style="height:4px;background:rgba(255,255,255,.3);border-radius:0 0 .6rem .6rem">
+                        <div class="toast-bar" style="height:100%;width:100%;background:rgba(255,255,255,.7);transition:width 3.5s linear;border-radius:inherit"></div>
+                    </div>
+                </div>
+                <style>
+                    @@keyframes slideInRight { from { transform: translateX(120%); opacity:0; } to { transform: translateX(0); opacity:1; } }
+                </style>`);
             $('body').append(toast);
-            setTimeout(() => toast.remove(), 3500);
+            setTimeout(() => toast.find('.toast-bar').css('width', '0%'), 50);
+            setTimeout(() => { toast.css('animation', 'slideInRight .3s ease reverse'); setTimeout(() => toast.remove(), 300); }, 3500);
         }
     </script>
 }

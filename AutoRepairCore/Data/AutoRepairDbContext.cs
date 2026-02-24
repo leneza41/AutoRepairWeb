@@ -3,26 +3,30 @@ using AutoRepairCore.Models;
 
 namespace AutoRepairCore.Data
 {
+    // Contexto principal de la base de datos AutoRepairDB
     public class AutoRepairDbContext : DbContext
     {
-        public AutoRepairDbContext(DbContextOptions<AutoRepairDbContext> options) : base(options)
-        {
-        }
+        public AutoRepairDbContext(DbContextOptions<AutoRepairDbContext> options) : base(options) { }
 
+        // Tablas principales
         public DbSet<Customer> Customers { get; set; }
         public DbSet<Vehicle> Vehicles { get; set; }
         public DbSet<Mechanic> Mechanics { get; set; }
         public DbSet<Service> Services { get; set; }
         public DbSet<Replacement> Replacements { get; set; }
         public DbSet<ServiceOrder> ServiceOrders { get; set; }
+
+        // Tablas intermedias (relaciones N:M)
         public DbSet<OrderReplacement> OrderReplacements { get; set; }
         public DbSet<OrderService> OrderServices { get; set; }
         public DbSet<OrderMechanic> OrderMechanics { get; set; }
 
+        // Configura las entidades, relaciones y triggers registrados
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
+            // Cliente
             modelBuilder.Entity<Customer>(entity =>
             {
                 entity.HasKey(e => e.CustomerID);
@@ -32,6 +36,7 @@ namespace AutoRepairCore.Data
                 entity.Property(e => e.Email).HasMaxLength(50);
             });
 
+            // Vehículo — los triggers calculan Antiquity en INSERT/UPDATE
             modelBuilder.Entity<Vehicle>(entity =>
             {
                 entity.HasKey(e => e.SerialNumber);
@@ -48,6 +53,7 @@ namespace AutoRepairCore.Data
                 });
             });
 
+            // Mecánico
             modelBuilder.Entity<Mechanic>(entity =>
             {
                 entity.HasKey(e => e.EmployeeID);
@@ -55,18 +61,21 @@ namespace AutoRepairCore.Data
                 entity.Property(e => e.Salary).HasColumnType("decimal(10,2)");
             });
 
+            // Servicio
             modelBuilder.Entity<Service>(entity =>
             {
                 entity.HasKey(e => e.ServiceID);
                 entity.Property(e => e.Cost).HasColumnType("decimal(10,2)");
             });
 
+            // Refacción
             modelBuilder.Entity<Replacement>(entity =>
             {
                 entity.HasKey(e => e.ReplacementID);
                 entity.Property(e => e.UnitPrice).HasColumnType("decimal(10,2)");
             });
 
+            // Orden de servicio — sin CASCADE para no borrar órdenes al cambiar vehículo
             modelBuilder.Entity<ServiceOrder>(entity =>
             {
                 entity.HasKey(e => e.Folio);
@@ -77,6 +86,7 @@ namespace AutoRepairCore.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
+            // Refacciones de la orden (PK compuesta)
             modelBuilder.Entity<OrderReplacement>(entity =>
             {
                 entity.HasKey(e => new { e.ReplacementID, e.Folio });
@@ -88,6 +98,7 @@ namespace AutoRepairCore.Data
                     .HasForeignKey(e => e.Folio);
             });
 
+            // Servicios de la orden (PK compuesta) — trigger recalcula el costo de la orden
             modelBuilder.Entity<OrderService>(entity =>
             {
                 entity.HasKey(e => new { e.ServiceID, e.Folio });
@@ -103,6 +114,7 @@ namespace AutoRepairCore.Data
                 });
             });
 
+            // Mecánicos asignados a la orden (PK compuesta)
             modelBuilder.Entity<OrderMechanic>(entity =>
             {
                 entity.HasKey(e => new { e.EmployeeID, e.Folio });
